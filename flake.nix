@@ -1,6 +1,5 @@
 {
   inputs = {
-    nixpkgs.url = "nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     fenix = {
       url = "github:nix-community/fenix";
@@ -17,8 +16,10 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         deps = with pkgs; [
+          pkgs.pkg-config
           xorg.libX11
           xorg.libXinerama
+          xorg.libXrandr
         ];
 
         devToolchain = fenix.packages.${system}.stable;
@@ -34,7 +35,7 @@
               patchelf --set-rpath "${pkgs.lib.makeLibraryPath deps}" $p
             done
           '';
- 
+
           GIT_HASH = self.shortRev or "dirty";
         });
       in
@@ -52,7 +53,7 @@
         # `nix develop`
         devShell = pkgs.mkShell
           {
-            buildInputs = deps ++ [ pkgs.pkg-config pkgs.systemd ];
+            buildInputs = deps ++ [ pkgs.systemd ];
             nativeBuildInputs = with pkgs; [
               gnumake
               (devToolchain.withComponents [
@@ -63,7 +64,7 @@
                 "rustfmt"
               ])
               fenix.packages.${system}.rust-analyzer
-            ];
+            ] ++ deps;
           };
       })) // {
       overlay = final: prev: {

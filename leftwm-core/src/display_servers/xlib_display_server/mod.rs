@@ -13,6 +13,7 @@ use crate::DisplayServer;
 use crate::Keybind;
 use futures::prelude::*;
 use std::os::raw::c_uint;
+use std::convert::TryFrom;
 use std::pin::Pin;
 use x11_dl::xlib;
 
@@ -170,10 +171,11 @@ impl XlibDisplayServer {
                 });
             } else {
                 for wsc in &workspaces {
-                    let mut screen = Screen::from(wsc);
-                    screen.root = self.root.into();
-                    let e = DisplayEvent::ScreenCreate(screen);
-                    events.push(e);
+                    if let Ok(mut screen) = Screen::try_from(wsc) {
+                        screen.root = self.root.into();
+                        let e = DisplayEvent::ScreenCreate(screen);
+                        events.push(e);
+                    }
                 }
             }
         }

@@ -1,8 +1,10 @@
 use super::{DockArea, Size, WindowHandle};
 use crate::config::Workspace;
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use std::convert::From;
+use std::convert::{From, TryFrom};
 use x11_dl::xlib;
+use xrandr::{Monitor, XHandle};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Screen {
@@ -20,6 +22,17 @@ pub struct BBox {
     pub y: i32,
     pub width: i32,
     pub height: i32,
+}
+
+impl From<&Monitor> for BBox {
+    fn from(m: &Monitor) -> Self {
+        Self {
+            x: m.x,
+            y: m.y,
+            width: m.width_px,
+            height: m.height_px,
+        }
+    }
 }
 
 impl Screen {
@@ -60,18 +73,49 @@ impl Screen {
     }
 }
 
-impl From<&Workspace> for Screen {
-    fn from(wsc: &Workspace) -> Self {
-        Self {
-            root: WindowHandle::MockHandle(0),
-            bbox: BBox {
-                height: wsc.height,
-                width: wsc.width,
-                x: wsc.x,
-                y: wsc.y,
-            },
-            wsid: wsc.id,
-            max_window_width: wsc.max_window_width,
+impl TryFrom<&Workspace> for Screen {
+    type Error = anyhow::Error;
+
+    fn try_from(wsc: &Workspace) -> Result<Self, Self::Error> {
+        match (
+            wsc.output_name.as_ref(),
+            wsc.x,
+            wsc.y,
+            wsc.width,
+            wsc.height,
+        ) {
+            (None, Some(x), Some(y), Some(width), Some(height)) => Ok(Self {
+                root: WindowHandle::MockHandle(0),
+                wsid: wsc.id,
+                max_window_width: wsc.max_window_width,
+                bbox: BBox {
+                    x,
+                    y,
+                    width,
+                    height,
+                },
+            }),
+            (Some(name), _, _, _, _) => {
+                let monitors = XHandle::open()
+                    .context("could not open xrandr")?
+                    .monitors()?;
+                let monitor = monitors
+                    .iter()
+                    .find(|monitor| monitor.name == *name)
+                    .context("could not find monitor")?;
+                Ok(Self {
+                    root: WindowHandle::MockHandle(0),
+                    wsid: wsc.id,
+                    max_window_width: wsc.max_window_width,
+                    bbox: BBox {
+                        x: wsc.x.unwrap_or(monitor.x),
+                        y: wsc.x.unwrap_or(monitor.y),
+                        width: wsc.width.unwrap_or(monitor.width_px),
+                        height: wsc.height.unwrap_or(monitor.height_px),
+                    },
+                })
+            }
+            _ => Err(anyhow::anyhow!("foo")),
         }
     }
 }
@@ -101,6 +145,22 @@ impl From<&x11_dl::xinerama::XineramaScreenInfo> for Screen {
                 width: root.width.into(),
                 x: root.x_org.into(),
                 y: root.y_org.into(),
+            },
+            wsid: None,
+            max_window_width: None,
+        }
+    }
+}
+
+impl From<&xrandr::Monitor> for Screen {
+    fn from(monitor: &xrandr::Monitor) -> Self {
+        Self {
+            root: WindowHandle::MockHandle(0),
+            bbox: BBox {
+                x: monitor.x,
+                y: monitor.y,
+                width: monitor.width_px,
+                height: monitor.height_px,
             },
             wsid: None,
             max_window_width: None,

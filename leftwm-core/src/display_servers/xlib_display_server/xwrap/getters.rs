@@ -212,36 +212,41 @@ impl XWrap {
     /// Also panics if window attrs cannot be obtained.
     #[must_use]
     pub fn get_screens(&self) -> Vec<Screen> {
-        use x11_dl::xinerama::XineramaScreenInfo;
-        use x11_dl::xinerama::Xlib;
-        let xlib = Xlib::open().expect("Couldn't not connect to Xorg Server");
-        let xinerama = unsafe { (xlib.XineramaIsActive)(self.display) } > 0;
-        if xinerama {
-            let root = self.get_default_root_handle();
-            let mut screen_count = 0;
-            let info_array_raw =
-                unsafe { (xlib.XineramaQueryScreens)(self.display, &mut screen_count) };
-            // Take ownership of the array.
-            let xinerama_infos: &[XineramaScreenInfo] =
-                unsafe { slice::from_raw_parts(info_array_raw, screen_count as usize) };
-            xinerama_infos
-                .iter()
-                .map(|i| {
-                    let mut s = Screen::from(i);
-                    s.root = root;
-                    s
-                })
-                .collect()
-        } else {
-            // NON-XINERAMA
-            let roots: Result<Vec<xlib::XWindowAttributes>, _> = self
-                .get_roots()
-                .iter()
-                .map(|w| self.get_window_attrs(*w))
-                .collect();
-            let roots = roots.expect("Error: No screen were detected");
-            roots.iter().map(Screen::from).collect()
-        }
+        use xrandr::XHandle;
+        // let xlib = Xlib::open().expect("Couldn't not connect to Xorg Server");
+        let monitors = XHandle::open()
+            .expect("Couldn't not connect to xrandr")
+            .monitors()
+            .expect("Could not list monitors");
+        monitors.iter().map(Screen::from).collect()
+
+        // let xinerama = unsafe { (xlib.XineramaIsActive)(self.display) } > 0;
+        // if xinerama {
+        //     let root = self.get_default_root_handle();
+        //     let mut screen_count = 0;
+        //     let info_array_raw =
+        //         unsafe { (xlib.XineramaQueryScreens)(self.display, &mut screen_count) };
+        //     // Take ownership of the array.
+        //     let xinerama_infos: &[XineramaScreenInfo] =
+        //         unsafe { slice::from_raw_parts(info_array_raw, screen_count as usize) };
+        //     xinerama_infos
+        //         .iter()
+        //         .map(|i| {
+        //             let mut s = Screen::from(i);
+        //             s.root = root;
+        //             s
+        //         })
+        //         .collect()
+        // } else {
+        //     // NON-XINERAMA
+        //     let roots: Result<Vec<xlib::XWindowAttributes>, _> = self
+        //         .get_roots()
+        //         .iter()
+        //         .map(|w| self.get_window_attrs(*w))
+        //         .collect();
+        //     let roots = roots.expect("Error: No screen were detected");
+        //     roots.iter().map(Screen::from).collect()
+        // }
     }
 
     /// Returns the dimensions of the screens.
